@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Proposal Price Estimator</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg: #0f0e0c;
+    --surface: #1a1917;
+    --border: #2e2c28;
+    --accent: #d4a853;
+    --accent2: #8fb88a;
+    --text: #e8e4dc;
+    --muted: #7a7670;
+    --red: #c97b6a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    padding: 40px 20px;
+  }
+  .grain {
+    position: fixed; inset: 0; pointer-events: none; z-index: 999;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    opacity: 0.35;
+  }
+  header {
+    max-width: 720px; margin: 0 auto 48px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 24px;
+  }
+  .eyebrow {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px; letter-spacing: 0.2em;
+    color: var(--accent); text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  h1 {
+    font-family: 'DM Serif Display', serif;
+    font-size: clamp(28px, 5vw, 44px);
+    color: var(--text); line-height: 1.1;
+  }
+  h1 em { color: var(--accent); font-style: italic; }
+  .subtitle { color: var(--muted); font-size: 14px; margin-top: 8px; font-weight: 300; }
+
+  .container { max-width: 720px; margin: 0 auto; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 32px;
+    margin-bottom: 20px;
+  }
+  .card-title {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 24px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .card-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .grid-1 { display: grid; grid-template-columns: 1fr; gap: 20px; }
+
+  label {
+    display: block;
+    font-size: 12px; font-weight: 500; letter-spacing: 0.05em;
+    color: var(--muted); margin-bottom: 7px; text-transform: uppercase;
+  }
+  input, select {
+    width: 100%; background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px; color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 15px; padding: 11px 14px;
+    transition: border-color 0.2s;
+    appearance: none;
+  }
+  input:focus, select:focus {
+    outline: none; border-color: var(--accent);
+  }
+  select {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%237a7670' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 14px center;
+    cursor: pointer;
+  }
+  input::placeholder { color: var(--muted); }
+  input:disabled, input.dimmed {
+    opacity: 0.3; cursor: not-allowed; pointer-events: none;
+  }
+  .field-group.dimmed label { opacity: 0.3; }
+  .field-group.dimmed input { opacity: 0.3; cursor: not-allowed; pointer-events: none; }
+
+  .toggles { display: flex; flex-wrap: wrap; gap: 10px; }
+  .toggle-btn {
+    padding: 9px 18px; border-radius: 30px;
+    border: 1px solid var(--border);
+    background: var(--bg); color: var(--muted);
+    font-family: 'DM Mono', monospace; font-size: 11px;
+    cursor: pointer; transition: all 0.18s; letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .toggle-btn.active {
+    border-color: var(--accent2); background: rgba(143,184,138,0.1);
+    color: var(--accent2);
+  }
+  .toggle-btn.na {
+    border-color: var(--border); background: rgba(255,255,255,0.03);
+    color: var(--muted); text-decoration: line-through; opacity: 0.6;
+  }
+
+  .estimate-card {
+    background: linear-gradient(135deg, #1e1c18 0%, #252219 100%);
+    border: 1px solid var(--accent);
+    border-radius: 16px; padding: 40px 32px;
+    text-align: center; position: relative; overflow: hidden;
+  }
+  .estimate-card::before {
+    content: '';
+    position: absolute; top: -60px; right: -60px;
+    width: 200px; height: 200px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(212,168,83,0.12) 0%, transparent 70%);
+  }
+  .estimate-label {
+    font-family: 'DM Mono', monospace; font-size: 11px;
+    letter-spacing: 0.2em; text-transform: uppercase;
+    color: var(--accent); margin-bottom: 12px;
+  }
+  .estimate-price {
+    font-family: 'DM Serif Display', serif;
+    font-size: clamp(42px, 8vw, 68px);
+    color: var(--text); line-height: 1;
+    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .estimate-range {
+    font-size: 13px; color: var(--muted); margin-top: 10px;
+    font-family: 'DM Mono', monospace;
+  }
+  .estimate-reasoning {
+    margin-top: 24px; text-align: left;
+    background: rgba(0,0,0,0.3); border-radius: 8px;
+    padding: 16px; font-size: 13px; color: var(--muted);
+    line-height: 1.6; font-family: 'DM Mono', monospace;
+  }
+  .reasoning-row {
+    display: flex; justify-content: space-between;
+    padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+  .reasoning-row:last-child { border-bottom: none; }
+  .reasoning-val { color: var(--accent); }
+
+  .btn-calc {
+    width: 100%; padding: 16px;
+    background: var(--accent); color: #0f0e0c;
+    border: none; border-radius: 10px;
+    font-family: 'DM Mono', monospace; font-size: 13px;
+    font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase;
+    cursor: pointer; transition: all 0.2s;
+    margin-top: 8px;
+  }
+  .btn-calc:hover { background: #e0b860; transform: translateY(-1px); }
+  .btn-calc:active { transform: translateY(0); }
+
+  .historical-note {
+    font-size: 12px; color: var(--muted); text-align: center;
+    padding: 16px; border: 1px dashed var(--border); border-radius: 8px;
+    font-family: 'DM Mono', monospace; line-height: 1.7;
+  }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent2); display: inline-block; margin-right: 6px; }
+
+  @media(max-width: 520px) { .grid-2 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="grain"></div>
+
+<div class="container">
+  <header>
+    <div class="eyebrow">Design Services</div>
+    <h1>Proposal <em>Estimator</em></h1>
+    <p class="subtitle">Powered by your historical project data · 7 comparable projects</p>
+  </header>
+
+  <!-- Project Info -->
+  <div class="card">
+    <div class="card-title">Project Details</div>
+    <div class="grid-2">
+      <div>
+        <label>Project Name</label>
+        <input type="text" id="projName" placeholder="e.g. 123 Main St"/>
+      </div>
+      <div>
+        <label>Client</label>
+        <input type="text" id="client" placeholder="Client name"/>
+      </div>
+      <div>
+        <label>Project Type</label>
+        <select id="projType" onchange="handleTypeChange()">
+          <option value="">Select type…</option>
+          <option value="SFH">SFH (Single Family Home)</option>
+          <option value="Apartment">Apartment / Multi-Unit</option>
+        </select>
+      </div>
+      <div>
+        <label>Scope of Work</label>
+        <select id="sow">
+          <option value="">Select scope…</option>
+          <option value="New Construction">New Construction</option>
+          <option value="Renovation">Renovation</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- Size -->
+  <div class="card">
+    <div class="card-title">Scale</div>
+    <div class="grid-2">
+      <div class="field-group" id="fg-sqft">
+        <label>Square Footage of SOW</label>
+        <input type="number" id="sqft" placeholder="e.g. 4500" min="0"/>
+      </div>
+      <div class="field-group" id="fg-units">
+        <label>Number of Units (apartments)</label>
+        <input type="number" id="units" placeholder="e.g. 6" min="0"/>
+      </div>
+    </div>
+    <p style="font-size:12px;color:var(--muted);margin-top:12px;font-family:'DM Mono',monospace;" id="scale-hint">
+      ↳ Select a Project Type above to activate the relevant field
+    </p>
+  </div>
+
+  <!-- Design Disciplines -->
+  <div class="card">
+    <div class="card-title">Design Disciplines</div>
+    <div class="toggles">
+      <button class="toggle-btn" id="btn-mech" onclick="toggleDisc('mech')">Mechanical</button>
+      <button class="toggle-btn" id="btn-elec" onclick="toggleDisc('elec')">Electrical</button>
+      <button class="toggle-btn" id="btn-plumb" onclick="toggleDisc('plumb')">Plumbing</button>
+    </div>
+    <p style="font-size:12px;color:var(--muted);margin-top:14px;font-family:'DM Mono',monospace;">
+      Click to toggle Yes / N/A
+    </p>
+  </div>
+
+  <!-- Other Factors -->
+  <div class="card">
+    <div class="card-title">Other Factors</div>
+    <div>
+      <label>Notes / Special Conditions</label>
+      <input type="text" id="other" placeholder="e.g. historic designation, phased delivery…"/>
+    </div>
+  </div>
+
+  <div id="data-status" style="font-family:'DM Mono',monospace;font-size:11px;text-align:center;padding:10px 0;color:var(--muted);"></div>
+  <button class="btn-calc" id="calcBtn" onclick="calculate()">Calculate Estimate →</button>
+
+  <!-- Result -->
+  <div class="card estimate-card" id="resultCard" style="margin-top:24px;display:none;">
+    <div class="estimate-label">Estimated Proposal Price</div>
+    <div class="estimate-price" id="priceDisplay">$0</div>
+    <div class="estimate-range" id="rangeDisplay"></div>
+    <div class="estimate-reasoning" id="reasoningBox"></div>
+  </div>
+
+  <!-- Historical note -->
+  <div class="historical-note" id="hist-note" style="margin-top:20px;">
+    <span style="color:var(--muted);font-family:'DM Mono',monospace;font-size:12px;">Loading project data…</span>
+  </div>
+</div>
+
+<script>
+  const SHEET_ID  = '1OaD3ieK973e-dW1039NOl7f1YG-JK6WZyhd9XBucJj0';
+  const API_KEY   = 'AIzaSyD1wXNPOBkdZZ8Ra6WazUd4iO2cktbaCEM';
+
+  let history = [];
+  let dataLoaded = false;
+
+  function parseSheetRows(rows) {
+    const headerIdx = rows.findIndex(r => r.join(',').toLowerCase().includes('project name'));
+    if (headerIdx === -1) return [];
+    const headers = rows[headerIdx].map(h => (h || '').trim().toLowerCase());
+
+    const col = (row, name) => {
+      const i = headers.findIndex(h => h.includes(name));
+      return i >= 0 ? (row[i] || '').trim() : '';
+    };
+
+    const parsed = [];
+    for (let i = headerIdx + 1; i < rows.length; i++) {
+      const row   = rows[i];
+      const name  = col(row, 'project name');
+      const price = parseFloat(col(row, 'proposal price').replace(/[^0-9.]/g, ''));
+      const type  = col(row, 'project type');
+      if (!name || !price || !type) continue;
+
+      const sowVal  = col(row, 'sow');
+      const sqftVal = parseFloat(col(row, 'sq ft'));
+      const unitVal = parseFloat(col(row, '# of units'));
+      const mechVal = col(row, 'mechanical').toLowerCase();
+      const elecVal = col(row, 'electrical').toLowerCase();
+      const plmbVal = col(row, 'plumbing').toLowerCase();
+
+      parsed.push({
+        name, type: type.trim(), sow: sowVal,
+        sqft:  isNaN(sqftVal) ? null : sqftVal,
+        units: isNaN(unitVal) ? null : unitVal,
+        mech:  mechVal === 'yes',
+        elec:  elecVal === 'yes',
+        plumb: plmbVal === 'yes',
+        price
+      });
+    }
+    return parsed;
+  }
+
+  async function loadSheetData() {
+    const statusEl = document.getElementById('data-status');
+    const calcBtn  = document.getElementById('calcBtn');
+    statusEl.innerHTML = '⟳ Fetching latest data from Google Sheets…';
+    statusEl.style.color = 'var(--muted)';
+    calcBtn.disabled = true;
+    calcBtn.style.opacity = '0.5';
+
+    try {
+      const TAB = encodeURIComponent('Residential Home Pricing');
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${TAB}?key=${API_KEY}`;
+      const dataRes = await fetch(url);
+      const json = await dataRes.json();
+
+      // Show raw error from Google if it fails
+      if (!dataRes.ok || json.error) {
+        const msg = json.error?.message || json.error?.status || `HTTP ${dataRes.status}`;
+        throw new Error(msg);
+      }
+
+      history = parseSheetRows(json.values || []);
+      const tabName = 'Residential Home Pricing';
+
+      if (history.length === 0) throw new Error('Sheet loaded but no valid project rows found — check column headers match expected names');
+
+      dataLoaded = true;
+      const sfh = history.filter(h => h.type === 'SFH' && h.price > 0);
+      const apt = history.filter(h => h.type === 'Apartment' && h.price > 0);
+      statusEl.innerHTML = `<span style="color:var(--accent2)">✓ Live data loaded from "${tabName}"</span> · ${history.length} projects (${sfh.length} SFH · ${apt.length} Apt) · <span style="color:var(--muted)">refreshes on page load</span>`;
+      calcBtn.disabled = false;
+      calcBtn.style.opacity = '1';
+
+      const sfhNC   = sfh.filter(h => h.sow === 'New Construction');
+      const sfhRen  = sfh.filter(h => h.sow === 'Renovation');
+      const aptUnit = apt.filter(h => h.units > 0);
+      const avgSFHNC  = sfhNC.length  ? sfhNC.reduce((a,b)=>a+b.price,0)/sfhNC.length : 0;
+      const avgSFHRen = sfhRen.length ? sfhRen.reduce((a,b)=>a+b.price,0)/sfhRen.length : 0;
+      const avgAptPU  = aptUnit.length ? aptUnit.reduce((a,b)=>a+(b.price/b.units),0)/aptUnit.length : 0;
+      document.getElementById('hist-note').innerHTML =
+        `<span class="dot"></span>Based on <strong style="color:var(--text)">${history.length}</strong> projects from your live Google Sheet<br/>` +
+        (avgSFHNC  ? `SFH New Construction avg: <strong style="color:var(--text)">${fmt(avgSFHNC)}</strong> · ` : '') +
+        (avgSFHRen ? `SFH Renovation avg: <strong style="color:var(--text)">${fmt(avgSFHRen)}</strong> · ` : '') +
+        (avgAptPU  ? `Apartment (per unit) avg: <strong style="color:var(--text)">${fmt(avgAptPU)}</strong>` : '');
+
+    } catch(e) {
+      statusEl.innerHTML = `<span style="color:var(--red)">⚠ Could not load sheet: ${e.message}</span> &nbsp;<button onclick="loadSheetData()" style="background:none;border:1px solid var(--border);color:var(--muted);padding:3px 10px;border-radius:4px;cursor:pointer;font-family:'DM Mono',monospace;font-size:10px;">Retry</button>
+        <br/><span style="color:var(--muted);font-size:10px;">👉 Make sure your Google Sheet is set to <strong style="color:var(--text)">Anyone with the link → Viewer</strong> (Share button, top right)</span>`;
+      // Fall back to hardcoded data so tool still works
+      // Fallback to hardcoded data
+      history = [
+        { type:'SFH', sow:'New Construction', sqft:7600,  units:null, mech:true, elec:true,  plumb:true, price:8500 },
+        { type:'SFH', sow:'New Construction', sqft:4593,  units:null, mech:true, elec:true,  plumb:true, price:7000 },
+        { type:'SFH', sow:'New Construction', sqft:13077, units:null, mech:true, elec:true,  plumb:true, price:7150 },
+        { type:'SFH', sow:'Renovation',       sqft:529,   units:null, mech:true, elec:true,  plumb:true, price:1000 },
+        { type:'SFH', sow:'Renovation',       sqft:255,   units:null, mech:false,elec:true,  plumb:true, price:1200 },
+        { type:'SFH', sow:'New Construction', sqft:7343,  units:null, mech:true, elec:false, plumb:true, price:6000 },
+        { type:'Apartment', sow:'New Construction', sqft:null, units:8, mech:true, elec:true, plumb:true, price:14400 },
+        { type:'Apartment', sow:'New Construction', sqft:null, units:6, mech:true, elec:true, plumb:true, price:14000 },
+      ];
+      dataLoaded = true;
+      calcBtn.disabled = false;
+      calcBtn.style.opacity = '1';
+    }
+  }
+
+  const disc = { mech: false, elec: false, plumb: false };
+
+  function toggleDisc(key) {
+    disc[key] = !disc[key];
+    const btn = document.getElementById('btn-' + key);
+    btn.classList.toggle('active', disc[key]);
+    btn.classList.toggle('na', !disc[key]);
+    if (!disc[key]) btn.classList.add('na'); else btn.classList.remove('na');
+  }
+  // init all active
+  ['mech','elec','plumb'].forEach(k => { disc[k] = true; document.getElementById('btn-'+k).classList.add('active'); });
+
+  function fmt(n) { return '$' + Math.round(n).toLocaleString(); }
+
+  function handleTypeChange() {
+    const type = document.getElementById('projType').value;
+    const fgSqft  = document.getElementById('fg-sqft');
+    const fgUnits = document.getElementById('fg-units');
+    const sqftIn  = document.getElementById('sqft');
+    const unitsIn = document.getElementById('units');
+    const hint    = document.getElementById('scale-hint');
+
+    if (type === 'SFH') {
+      fgSqft.classList.remove('dimmed');
+      fgUnits.classList.add('dimmed');
+      sqftIn.disabled = false;
+      unitsIn.disabled = true;
+      unitsIn.value = '';
+      hint.textContent = '↳ For SFH use Sq Ft';
+    } else if (type === 'Apartment') {
+      fgUnits.classList.remove('dimmed');
+      fgSqft.classList.add('dimmed');
+      unitsIn.disabled = false;
+      sqftIn.disabled = true;
+      sqftIn.value = '';
+      hint.textContent = '↳ For Apartment buildings use # of Units';
+    } else {
+      fgSqft.classList.remove('dimmed');
+      fgUnits.classList.remove('dimmed');
+      sqftIn.disabled = false;
+      unitsIn.disabled = false;
+      hint.textContent = '↳ Select a Project Type above to activate the relevant field';
+    }
+  }
+
+  // Grey out both on load until type is chosen, then fetch sheet
+  document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('fg-sqft').classList.add('dimmed');
+    document.getElementById('fg-units').classList.add('dimmed');
+    document.getElementById('sqft').disabled = true;
+    document.getElementById('units').disabled = true;
+    loadSheetData();
+  });
+
+  function calculate() {
+    const type = document.getElementById('projType').value;
+    const sow  = document.getElementById('sow').value;
+    const sqft = parseFloat(document.getElementById('sqft').value) || 0;
+    const units = parseFloat(document.getElementById('units').value) || 0;
+
+    if (!type || !sow) {
+      alert('Please select a Project Type and Scope of Work.');
+      return;
+    }
+
+    let estimate = 0;
+    let reasoning = [];
+
+    if (type === 'Apartment') {
+      // Apartment: price per unit
+      const aptData = history.filter(h => h.type === 'Apartment');
+      const perUnit = aptData.map(h => h.price / h.units);
+      const avgPerUnit = perUnit.reduce((a,b) => a+b, 0) / perUnit.length; // ~2067
+      estimate = units > 0 ? units * avgPerUnit : avgPerUnit * 6; // fallback assume 6
+      reasoning.push({ label: 'Avg price per unit (historical)', val: fmt(avgPerUnit) });
+      reasoning.push({ label: 'Units entered', val: units > 0 ? units : '~6 (default)' });
+      reasoning.push({ label: 'Base estimate', val: fmt(estimate) });
+    } else {
+      // SFH
+      const sfhData = history.filter(h => h.type === 'SFH' && h.sow === sow && h.sqft > 0);
+      if (sfhData.length > 0) {
+        // weighted by similarity in sqft
+        if (sqft > 0) {
+          const withDiffs = sfhData.map(h => ({ ...h, diff: Math.abs(h.sqft - sqft) }));
+          withDiffs.sort((a,b) => a.diff - b.diff);
+          // Use 3 closest or all if fewer
+          const top = withDiffs.slice(0, Math.min(3, withDiffs.length));
+          const avgPrice = top.reduce((a,b) => a + b.price, 0) / top.length;
+          estimate = avgPrice;
+          reasoning.push({ label: 'Comparable projects used', val: top.length });
+          reasoning.push({ label: 'Avg comparable price', val: fmt(avgPrice) });
+
+          // Scale slightly by sqft deviation from closest
+          const closest = top[0];
+          const scaleFactor = sqft / closest.sqft;
+          const scaledAdj = estimate * (1 + (scaleFactor - 1) * 0.15); // damped scaling
+          if (Math.abs(scaleFactor - 1) > 0.15) {
+            estimate = scaledAdj;
+            reasoning.push({ label: 'Sq ft adjustment factor', val: scaleFactor.toFixed(2) + '×' });
+          }
+        } else {
+          estimate = sfhData.reduce((a,b) => a+b.price, 0) / sfhData.length;
+          reasoning.push({ label: 'Avg historical (no sq ft given)', val: fmt(estimate) });
+        }
+      } else {
+        // Cross-estimate from all SFH
+        const allSFH = history.filter(h => h.type === 'SFH' && h.price > 0);
+        estimate = allSFH.reduce((a,b) => a+b.price, 0) / allSFH.length;
+        reasoning.push({ label: 'Fallback: all SFH avg', val: fmt(estimate) });
+      }
+
+      // Discipline adjustments
+      const allDiscs = [disc.mech, disc.elec, disc.plumb];
+      const activeCount = allDiscs.filter(Boolean).length;
+      if (activeCount < 3) {
+        const reduction = (3 - activeCount) * 0.12;
+        estimate *= (1 - reduction);
+        reasoning.push({ label: 'Discipline reduction (-' + Math.round(reduction*100) + '%)', val: fmt(estimate) });
+      }
+    }
+
+    // Range ± 10%
+    const low = estimate * 0.90;
+    const high = estimate * 1.10;
+    reasoning.push({ label: 'Range (±10%)', val: fmt(low) + ' – ' + fmt(high) });
+
+    // Render
+    const card = document.getElementById('resultCard');
+    card.style.display = 'block';
+    document.getElementById('priceDisplay').textContent = fmt(estimate);
+    document.getElementById('rangeDisplay').textContent = 'Range: ' + fmt(low) + ' – ' + fmt(high);
+
+    let html = '';
+    reasoning.forEach(r => {
+      html += `<div class="reasoning-row"><span>${r.label}</span><span class="reasoning-val">${r.val}</span></div>`;
+    });
+    document.getElementById('reasoningBox').innerHTML = html;
+
+    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+</script>
+</body>
+</html>
