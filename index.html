@@ -329,7 +329,7 @@
     calcBtn.style.opacity = '0.5';
 
     try {
-      const TAB = encodeURIComponent("'Residential Home Pricing'");
+      const TAB = encodeURIComponent("Residential Home Pricing");
       const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${TAB}?key=${API_KEY}`;
       const dataRes = await fetch(url);
       const json = await dataRes.json();
