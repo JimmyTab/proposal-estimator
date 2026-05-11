@@ -205,6 +205,7 @@
           <option value="">Select type…</option>
           <option value="SFH">SFH (Single Family Home)</option>
           <option value="Apartment">Apartment / Multi-Unit</option>
+          <option value="ADU">ADU (Attached Dwelling Unit)</option>
         </select>
       </div>
       <div>
@@ -435,13 +436,13 @@
     const unitsIn = document.getElementById('units');
     const hint    = document.getElementById('scale-hint');
 
-    if (type === 'SFH') {
+    if (type === 'SFH' || type === 'ADU') {
       fgSqft.classList.remove('dimmed');
       fgUnits.classList.add('dimmed');
       sqftIn.disabled = false;
       unitsIn.disabled = true;
       unitsIn.value = '';
-      hint.textContent = '↳ For SFH use Sq Ft';
+      hint.textContent = type === 'ADU' ? '↳ For ADU use Sq Ft' : '↳ For SFH use Sq Ft';
     } else if (type === 'Apartment') {
       fgUnits.classList.remove('dimmed');
       fgSqft.classList.add('dimmed');
@@ -490,6 +491,42 @@
       reasoning.push({ label: 'Avg price per unit (historical)', val: fmt(avgPerUnit) });
       reasoning.push({ label: 'Units entered', val: units > 0 ? units : '~6 (default)' });
       reasoning.push({ label: 'Base estimate', val: fmt(estimate) });
+    } else if (type === 'ADU') {
+      // ADU: sq ft based, use ADU history or fall back to SFH
+      const aduData = history.filter(h => h.type === 'ADU' && h.sow === sow && h.sqft > 0);
+      if (aduData.length > 0) {
+        if (sqft > 0) {
+          const withDiffs = aduData.map(h => ({ ...h, diff: Math.abs(h.sqft - sqft) }));
+          withDiffs.sort((a,b) => a.diff - b.diff);
+          const top = withDiffs.slice(0, Math.min(3, withDiffs.length));
+          const avgPrice = top.reduce((a,b) => a + b.price, 0) / top.length;
+          estimate = avgPrice;
+          reasoning.push({ label: 'Comparable projects used', val: top.length });
+          reasoning.push({ label: 'Avg comparable price', val: fmt(avgPrice) });
+          const closest = top[0];
+          const scaleFactor = sqft / closest.sqft;
+          const scaledAdj = estimate * (1 + (scaleFactor - 1) * 0.15);
+          if (Math.abs(scaleFactor - 1) > 0.15) {
+            estimate = scaledAdj;
+            reasoning.push({ label: 'Sq ft adjustment factor', val: scaleFactor.toFixed(2) + '×' });
+          }
+        } else {
+          estimate = aduData.reduce((a,b) => a+b.price, 0) / aduData.length;
+          reasoning.push({ label: 'Avg historical (no sq ft given)', val: fmt(estimate) });
+        }
+      } else {
+        document.getElementById('resultCard').style.display = 'none';
+        alert('No ADU project data found. Add ADU entries to your Google Sheet to use this project type.');
+        return;
+      }
+      // Discipline adjustments
+      const aduDiscs = [disc.mech, disc.elec, disc.plumb];
+      const aduActiveCount = aduDiscs.filter(Boolean).length;
+      if (aduActiveCount < 3) {
+        const reduction = (3 - aduActiveCount) * 0.12;
+        estimate *= (1 - reduction);
+        reasoning.push({ label: 'Discipline reduction (-' + Math.round(reduction*100) + '%)', val: fmt(estimate) });
+      }
     } else {
       // SFH
       const sfhData = history.filter(h => h.type === 'SFH' && h.sow === sow && h.sqft > 0);
@@ -542,7 +579,7 @@
     if (type === 'Apartment' && units > 0) {
       baseline = units * aptRate;
       baselineLabel = `${units} units × $${aptRate}/unit`;
-    } else if (type === 'SFH' && sqft > 0) {
+    } else if ((type === 'SFH' || type === 'ADU') && sqft > 0) {
       baseline = sqft * sfhRate;
       baselineLabel = `${sqft.toLocaleString()} sq ft × $${sfhRate}`;
     }
